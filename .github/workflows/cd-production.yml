@@ -1,0 +1,76 @@
+name: Production Deployment
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: ./backend
+        run: npm ci --only=production
+      
+      - name: Build and test
+        working-directory: ./backend
+        env:
+          NODE_ENV: production
+        run: |
+          npm run build
+          npm run test
+      
+      - name: Login to Azure Container Registry
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ secrets.AZURE_REGISTRY_URL }}
+          username: ${{ secrets.AZURE_REGISTRY_USERNAME }}
+          password: ${{ secrets.AZURE_REGISTRY_PASSWORD }}
+      
+      - name: Build and push Docker image
+        working-directory: ./backend
+        run: |
+          docker build -f docker/Dockerfile -t ${{ secrets.AZURE_REGISTRY_URL }}/sla-digital-backend:${{ github.sha }} .
+          docker push ${{ secrets.AZURE_REGISTRY_URL }}/sla-digital-backend:${{ github.sha }}
+      
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
+          slot-name: 'production'
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          images: ${{ secrets.AZURE_REGISTRY_URL }}/sla-digital-backend:${{ github.sha }}
+      
+      - name: Run database migrations
+        run: |
+          # Connect to production database and run migrations
+          # This would typically be done through Azure CLI or a secure connection
+          echo "Database migrations would be run here in a real deployment"
+      
+      - name: Health check
+        run: |
+          sleep 30
+          curl -f ${{ secrets.PRODUCTION_URL }}/health || exit 1
+      
+      - name: Notify team
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#deployments'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}

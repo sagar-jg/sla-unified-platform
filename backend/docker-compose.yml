@@ -1,0 +1,114 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: sla-platform-db
+    environment:
+      POSTGRES_DB: sla_platform_dev
+      POSTGRES_USER: slauser
+      POSTGRES_PASSWORD: slapassword123
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - sla-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U slauser -d sla_platform_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: sla-platform-redis
+    command: redis-server --appendonly yes --requirepass redispassword123
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - sla-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redispassword123", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Backend API
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: sla-platform-backend
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=sla_platform_dev
+      - DATABASE_USER=slauser
+      - DATABASE_PASSWORD=slapassword123
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=redispassword123
+      - JWT_SECRET=your-super-secret-jwt-key-for-development
+      - ENCRYPTION_KEY=your-32-character-encryption-key-dev
+      - NEW_RELIC_ENABLED=false
+      - LOG_LEVEL=debug
+      - CORS_ORIGIN=http://localhost:3000
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./src:/app/src
+      - ./logs:/app/logs
+    networks:
+      - sla-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # pgAdmin (Database Administration)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: sla-platform-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@sla-platform.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - sla-network
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  sla-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
