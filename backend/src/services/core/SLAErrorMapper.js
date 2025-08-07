@@ -7,7 +7,7 @@
  * PHASE 4: Response Format & Error Mapping
  */
 
-const Logger = require('../utils/logger');
+const Logger = require('../../utils/logger');
 
 class SLAErrorMapper {
   
