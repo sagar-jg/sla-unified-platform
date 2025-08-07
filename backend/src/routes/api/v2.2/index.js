@@ -4,7 +4,7 @@
  * Implements the exact SLA Digital v2.2 API specification alongside existing unified platform.
  * Base URL: /v2.2/* (proxies to https://api.sla-alacrity.com/v2.2/*)
  * 
- * PHASE 1: Route structure foundation
+ * PHASE 3: Authentication & Security - UPDATED with real middleware
  * Features: HTTP Basic Auth, Query String Parameters, POST-only methods
  */
 
@@ -12,10 +12,10 @@ const express = require('express');
 const router = express.Router();
 const Logger = require('../../../utils/logger');
 
-// Import SLA Digital specific middleware (to be created in Phase 3)
+// ✅ PHASE 3: Import real SLA Digital authentication middleware  
 const { slaBasicAuth, slaIPWhitelist, slaQueryParams } = require('../../../middleware/slaAuth');
 
-// Import SLA Digital controllers (to be created in Phase 2)  
+// ✅ PHASE 2: Import SLA Digital controllers (implemented)
 const slaSubscriptionController = require('../../../controllers/slaSubscriptionController');
 const slaChargeController = require('../../../controllers/slaChargeController');
 const slaPinController = require('../../../controllers/slaPinController');
@@ -25,15 +25,15 @@ const slaRefundController = require('../../../controllers/slaRefundController');
 const slaSandboxController = require('../../../controllers/slaSandboxController');
 
 /**
- * SLA Digital v2.2 Middleware Stack
- * 1. Basic Auth with IP whitelisting
- * 2. Query parameter parsing (SLA uses query strings, not JSON body)
- * 3. SLA response formatting
+ * ✅ PHASE 3: SLA Digital v2.2 Middleware Stack - REAL IMPLEMENTATION
+ * 1. HTTP Basic Auth with credential validation
+ * 2. IP whitelisting with CIDR support
+ * 3. Query parameter parsing (SLA uses query strings, not JSON body)
  */
 const slaMiddleware = [
-  slaBasicAuth,        // HTTP Basic Auth (Phase 3)
-  slaIPWhitelist,      // IP whitelisting (Phase 3) 
-  slaQueryParams       // Query string parameter handling (Phase 3)
+  slaBasicAuth,        // ✅ PHASE 3: HTTP Basic Auth implemented
+  slaIPWhitelist,      // ✅ PHASE 3: IP whitelisting implemented
+  slaQueryParams       // ✅ PHASE 3: Query string parameter handling implemented
 ];
 
 // ===== SUBSCRIPTION ENDPOINTS - SLA v2.2 SPECIFICATION =====
@@ -71,7 +71,7 @@ router.post('/subscription/free', slaMiddleware, slaSubscriptionController.free)
  * Gets current subscription status
  * Query Parameters: uuid
  */
-router.post('/subscription/status', slaMiddleware, slaSubscriptionController.status);
+router.post('/subscription/status', slaMiddleware, slaSubscriptionController.getStatus);
 
 /**
  * POST /v2.2/subscription/latest
@@ -144,7 +144,7 @@ router.post('/sandbox/provision', slaMiddleware, slaSandboxController.provision)
  */
 router.post('/sandbox/balances', slaMiddleware, slaSandboxController.balances);
 
-// ===== SLA v2.2 API INFO ENDPOINT =====
+// ===== SLA v2.2 API INFO ENDPOINT (No auth required) =====
 
 /**
  * GET /v2.2/ - API Information (no auth required for info)
@@ -218,18 +218,36 @@ router.get('/', (req, res) => {
       ip_whitelisting: 'CIDR format IP addresses required'
     },
     
+    // ✅ PHASE 3: Updated implementation status
     implementation_status: {
-      phase_1: 'Routes Structure - COMPLETE',
-      phase_2: 'Controllers Implementation - IN PROGRESS',
-      phase_3: 'Authentication & Security - PENDING',
-      phase_4: 'Response Format Mapping - PENDING',
-      phase_5: 'Testing & Validation - PENDING'
+      phase_1: 'Routes Structure - ✅ COMPLETE',
+      phase_2: 'Controllers Implementation - ✅ COMPLETE',
+      phase_3: 'Authentication & Security - ✅ COMPLETE',
+      phase_4: 'Response Format Mapping - 🔄 IN PROGRESS',
+      phase_5: 'Testing & Validation - ⏳ PENDING'
+    },
+    
+    // ✅ PHASE 3: Authentication details
+    authentication_details: {
+      type: 'HTTP Basic Authentication',
+      format: 'Authorization: Basic base64(username:password)',
+      ip_whitelisting: 'Required - CIDR format (e.g., 192.168.1.0/24)',
+      environments: {
+        sandbox: 'Credentials: sandbox_user:sandbox_pass',
+        production: 'Credentials provided by SLA Digital'
+      },
+      security_features: [
+        'Base64 credential encoding',
+        'CIDR IP range validation', 
+        'Request parameter validation',
+        'Comprehensive audit logging'
+      ]
     }
   });
 });
 
 /**
- * Health check for SLA v2.2 API
+ * ✅ PHASE 3: Updated health check for SLA v2.2 API
  */
 router.get('/health', (req, res) => {
   res.json({
@@ -250,16 +268,35 @@ router.get('/health', (req, res) => {
     
     total_endpoints: 14,
     operators_supported: 26,
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
+    
+    // ✅ PHASE 3: Authentication status
+    authentication: {
+      http_basic_auth: 'enabled',
+      ip_whitelisting: 'enabled',
+      query_param_validation: 'enabled',
+      security_logging: 'enabled'
+    },
+    
+    // ✅ PHASE 3: Implementation phases status
+    phases: {
+      routes: '✅ complete',
+      controllers: '✅ complete', 
+      authentication: '✅ complete',
+      response_mapping: '🔄 in_progress',
+      testing: '⏳ pending'
+    }
   });
 });
 
-// Error handler for SLA v2.2 routes
+// ✅ PHASE 3: Enhanced error handler for SLA v2.2 routes
 router.use((error, req, res, next) => {
   Logger.error('SLA Digital v2.2 API Error', {
     endpoint: req.path,
     method: req.method,
     params: req.query,
+    slaUser: req.slaUser?.username?.substring(0, 3) + '***' || 'unauthenticated',
+    ip: req.ip,
     error: error.message,
     stack: error.stack
   });
