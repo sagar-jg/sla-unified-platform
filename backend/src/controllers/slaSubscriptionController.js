@@ -3,23 +3,25 @@
  * 
  * Handles all SLA Digital v2.2 subscription endpoints using existing adapters.
  * Uses existing OperatorManager and adapter implementations for business logic.
- * Maps responses to exact SLA Digital v2.2 format.
+ * PHASE 4: Updated to use SLA Response and Error Mappers for 100% compliance.
  * 
- * PHASE 2: Controllers Implementation
+ * PHASE 4: Response Format & Error Mapping - UPDATED
  */
 
 const Logger = require('../utils/logger');
 const { UnifiedError } = require('../utils/errors');
 const { getInstance: getOperatorManager } = require('../services/core/OperatorManager');
 
-// Import response mapping service (to be created in Phase 4)
-// const { mapToSLAFormat } = require('../services/core/SLAResponseMapper');
+// ✅ PHASE 4: Import SLA Digital response and error mappers
+const SLAResponseMapper = require('../services/core/SLAResponseMapper');
+const SLAErrorMapper = require('../services/core/SLAErrorMapper');
 
 class SLASubscriptionController {
   
   /**
    * POST /v2.2/subscription/create
    * Creates new subscription using existing adapters
+   * ✅ PHASE 4: Updated with SLA response mapping
    * 
    * Query Parameters: msisdn, pin, campaign, merchant, [language], [trial], [charge], [correlator]
    */
@@ -40,49 +42,45 @@ class SLASubscriptionController {
       
       // Validate required parameters per SLA v2.2
       if (!campaign || !merchant) {
-        return res.status(200).json({
-          error: {
-            category: 'Request',
-            code: '2001',
-            message: 'Missing required parameters: campaign and merchant are mandatory'
-          }
-        });
+        const error = SLAErrorMapper.mapError(
+          { code: 'MISSING_PARAMETER', message: 'Missing required parameters' },
+          null,
+          { parameter: 'campaign, merchant' }
+        );
+        return res.status(200).json({ error });
       }
       
       // Validate identifier (msisdn or acr)
       const identifier = acr || msisdn;
       if (!identifier) {
-        return res.status(200).json({
-          error: {
-            category: 'Request', 
-            code: '2001',
-            message: 'Missing required parameter: msisdn or acr is mandatory'
-          }
-        });
+        const error = SLAErrorMapper.mapError(
+          { code: 'MISSING_PARAMETER', message: 'Missing required parameter' },
+          null,
+          { parameter: 'msisdn or acr' }
+        );
+        return res.status(200).json({ error });
       }
       
       // Validate PIN if provided (not all operators require PIN)
       if (pin && !/^\d{4,6}$/.test(pin)) {
-        return res.status(200).json({
-          error: {
-            category: 'Request',
-            code: '4001', 
-            message: 'Invalid PIN format: must be 4-6 digits'
-          }
-        });
+        const error = SLAErrorMapper.mapError(
+          { code: 'INVALID_PIN_FORMAT' },
+          null,
+          { parameter: 'pin' }
+        );
+        return res.status(200).json({ error });
       }
       
       // Determine operator from MSISDN/ACR or campaign
       const operatorCode = await SLASubscriptionController.determineOperator(identifier, campaign);
       
       if (!operatorCode) {
-        return res.status(200).json({
-          error: {
-            category: 'Request',
-            code: '2001',
-            message: 'Unable to determine operator from identifier'
-          }
-        });
+        const error = SLAErrorMapper.mapError(
+          { code: 'INVALID_PARAMETER', message: 'Unable to determine operator from identifier' },
+          null,
+          { parameter: 'msisdn/acr' }
+        );
+        return res.status(200).json({ error });
       }
       
       // Get operator manager and adapter
@@ -91,17 +89,28 @@ class SLASubscriptionController {
       // Check if operator is enabled
       const isEnabled = await operatorManager.isOperatorEnabled(operatorCode);
       if (!isEnabled) {
-        return res.status(200).json({
-          error: {
-            category: 'Service',
-            code: '5002', 
-            message: `Operator ${operatorCode} is currently unavailable`
-          }
-        });
+        const error = SLAErrorMapper.mapError(
+          { code: 'OPERATOR_DISABLED' },
+          operatorCode,
+          { endpoint: '/v2.2/subscription/create' }
+        );
+        return res.status(200).json({ error });
       }
       
       // Get adapter for the operator
       const adapter = operatorManager.getOperatorAdapter(operatorCode);
+      
+      // Validate PIN length for specific operators
+      if (pin && operatorCode === 'zain-kw' && !/^\d{5}$/.test(pin)) {
+        const error = SLAErrorMapper.createOperatorError('zain-kw', 'pin_length');
+        return res.status(200).json({ error });
+      }
+      
+      // Validate ACR requires correlator for Telenor
+      if (identifier.length === 48 && operatorCode.startsWith('telenor') && !correlator) {
+        const error = SLAErrorMapper.createOperatorError('telenor-mm', 'correlator_required');
+        return res.status(200).json({ error });
+      }
       
       // Prepare parameters for adapter
       const adapterParams = {
@@ -119,16 +128,28 @@ class SLASubscriptionController {
       };
       
       // Call adapter to create subscription
-      const response = await adapter.createSubscription(adapterParams);
+      const adapterResponse = await adapter.createSubscription(adapterParams);
       
-      // Map response to SLA Digital v2.2 format
-      const slaResponse = SLASubscriptionController.mapCreateResponse(response, operatorCode);
+      // ✅ PHASE 4: Map response to SLA Digital v2.2 format using mapper
+      const slaResponse = SLAResponseMapper.mapSubscriptionCreateResponse(
+        adapterResponse, 
+        operatorCode, 
+        {
+          msisdn: identifier.length !== 48 ? identifier : undefined,
+          acr: identifier.length === 48 ? identifier : undefined,
+          campaign,
+          merchant,
+          language,
+          correlator
+        }
+      );
       
       Logger.info('SLA v2.2 subscription created successfully', {
         endpoint: '/v2.2/subscription/create',
         operatorCode,
         uuid: slaResponse.uuid,
-        identifier: identifier ? identifier.substring(0, 6) + '***' : 'unknown'
+        identifier: identifier ? identifier.substring(0, 6) + '***' : 'unknown',
+        slaUser: req.slaUser?.username?.substring(0, 3) + '***'
       });
       
       // SLA v2.2: Always return HTTP 200, success/error in response body
@@ -139,11 +160,21 @@ class SLASubscriptionController {
         endpoint: '/v2.2/subscription/create',
         error: error.message,
         stack: error.stack,
-        params: req.query
+        params: req.query,
+        slaUser: req.slaUser?.username?.substring(0, 3) + '***'
       });
       
-      // Map error to SLA Digital format
-      const slaError = SLASubscriptionController.mapError(error);
+      // ✅ PHASE 4: Map error to SLA Digital format using error mapper
+      const slaError = SLAErrorMapper.mapError(
+        error,
+        req.query.operatorCode,
+        {
+          endpoint: '/v2.2/subscription/create',
+          parameter: 'subscription_creation',
+          operatorCode: req.query.operatorCode
+        }
+      );
+      
       res.status(200).json({ error: slaError });
     }
   }
@@ -151,6 +182,7 @@ class SLASubscriptionController {
   /**
    * POST /v2.2/subscription/status
    * Gets subscription status
+   * ✅ PHASE 4: Updated with SLA response mapping
    * 
    * Query Parameters: uuid
    */
@@ -159,61 +191,38 @@ class SLASubscriptionController {
       const { uuid } = req.query;
       
       if (!uuid) {
-        return res.status(200).json({
-          error: {
-            category: 'Request',
-            code: '2001',
-            message: 'Missing required parameter: uuid'
-          }
-        });
+        const error = SLAErrorMapper.mapError(
+          { code: 'MISSING_PARAMETER' },
+          null,
+          { parameter: 'uuid' }
+        );
+        return res.status(200).json({ error });
       }
       
-      // Find which operator this subscription belongs to (would need database lookup)
-      // For now, we'll try all enabled operators
-      const operatorManager = getOperatorManager();
-      const supportedOperators = operatorManager.getSupportedOperators();
+      // Find which operator this subscription belongs to
+      const { adapter, operatorCode } = await SLASubscriptionController.findSubscriptionOperator(uuid);
       
-      let subscriptionFound = false;
-      let response = null;
-      let operatorCode = null;
-      
-      for (const operator of supportedOperators) {
-        try {
-          const isEnabled = await operatorManager.isOperatorEnabled(operator.code);
-          if (!isEnabled) continue;
-          
-          const adapter = operatorManager.getOperatorAdapter(operator.code);
-          response = await adapter.getSubscriptionStatus(uuid);
-          
-          if (response && response.data) {
-            subscriptionFound = true;
-            operatorCode = operator.code;
-            break;
-          }
-        } catch (error) {
-          // Continue to next operator
-          continue;
-        }
+      if (!adapter) {
+        const error = SLAErrorMapper.mapError(
+          { code: 'SUBSCRIPTION_NOT_FOUND' },
+          null,
+          { parameter: 'uuid' }
+        );
+        return res.status(200).json({ error });
       }
       
-      if (!subscriptionFound) {
-        return res.status(200).json({
-          error: {
-            category: 'Request',
-            code: '2052',
-            message: 'Subscription not found'
-          }
-        });
-      }
+      // Get subscription status from adapter
+      const adapterResponse = await adapter.getSubscriptionStatus(uuid);
       
-      // Map response to SLA Digital format
-      const slaResponse = SLASubscriptionController.mapStatusResponse(response, operatorCode);
+      // ✅ PHASE 4: Map response to SLA Digital format using mapper
+      const slaResponse = SLAResponseMapper.mapSubscriptionStatusResponse(adapterResponse, operatorCode);
       
       Logger.info('SLA v2.2 subscription status retrieved', {
         endpoint: '/v2.2/subscription/status',
         operatorCode,
         uuid,
-        status: slaResponse.status
+        status: slaResponse.status,
+        slaUser: req.slaUser?.username?.substring(0, 3) + '***'
       });
       
       res.status(200).json(slaResponse);
@@ -222,10 +231,17 @@ class SLASubscriptionController {
       Logger.error('SLA v2.2 subscription status failed', {
         endpoint: '/v2.2/subscription/status',
         error: error.message,
-        uuid: req.query.uuid
+        uuid: req.query.uuid,
+        slaUser: req.slaUser?.username?.substring(0, 3) + '***'
       });
       
-      const slaError = SLASubscriptionController.mapError(error);
+      // ✅ PHASE 4: Map error using error mapper
+      const slaError = SLAErrorMapper.mapError(
+        error,
+        null,
+        { endpoint: '/v2.2/subscription/status' }
+      );
+      
       res.status(200).json({ error: slaError });
     }
   }
@@ -233,6 +249,7 @@ class SLASubscriptionController {
   /**
    * POST /v2.2/subscription/delete
    * Cancels/deletes subscription
+   * ✅ PHASE 4: Updated with SLA response mapping
    * 
    * Query Parameters: uuid
    */
@@ -241,38 +258,43 @@ class SLASubscriptionController {
       const { uuid } = req.query;
       
       if (!uuid) {
-        return res.status(200).json({
-          error: {
-            category: 'Request',
-            code: '2001',
-            message: 'Missing required parameter: uuid'
-          }
-        });
+        const error = SLAErrorMapper.mapError(
+          { code: 'MISSING_PARAMETER' },
+          null,
+          { parameter: 'uuid' }
+        );
+        return res.status(200).json({ error });
       }
       
       // Find operator for this subscription
       const { adapter, operatorCode } = await SLASubscriptionController.findSubscriptionOperator(uuid);
       
       if (!adapter) {
-        return res.status(200).json({
-          error: {
-            category: 'Request',
-            code: '2052',
-            message: 'Subscription not found'
-          }
-        });
+        const error = SLAErrorMapper.mapError(
+          { code: 'SUBSCRIPTION_NOT_FOUND' },
+          null,
+          { parameter: 'uuid' }
+        );
+        return res.status(200).json({ error });
       }
       
       // Cancel subscription via adapter
-      const response = await adapter.cancelSubscription(uuid);
+      const adapterResponse = await adapter.cancelSubscription(uuid);
       
-      // Map response to SLA Digital format
-      const slaResponse = SLASubscriptionController.mapDeleteResponse(response, operatorCode);
+      // ✅ PHASE 4: Map response to SLA Digital format
+      const slaResponse = {
+        uuid,
+        status: 'DELETED',
+        message: 'Subscription cancelled successfully',
+        timestamp: new Date().toISOString(),
+        operator_code: operatorCode
+      };
       
       Logger.info('SLA v2.2 subscription deleted successfully', {
         endpoint: '/v2.2/subscription/delete',
         operatorCode,
-        uuid
+        uuid,
+        slaUser: req.slaUser?.username?.substring(0, 3) + '***'
       });
       
       res.status(200).json(slaResponse);
@@ -281,10 +303,17 @@ class SLASubscriptionController {
       Logger.error('SLA v2.2 subscription deletion failed', {
         endpoint: '/v2.2/subscription/delete',
         error: error.message,
-        uuid: req.query.uuid
+        uuid: req.query.uuid,
+        slaUser: req.slaUser?.username?.substring(0, 3) + '***'
       });
       
-      const slaError = SLASubscriptionController.mapError(error);
+      // ✅ PHASE 4: Map error using error mapper
+      const slaError = SLAErrorMapper.mapError(
+        error,
+        null,
+        { endpoint: '/v2.2/subscription/delete' }
+      );
+      
       res.status(200).json({ error: slaError });
     }
   }
@@ -298,39 +327,39 @@ class SLASubscriptionController {
       const { uuid } = req.query;
       
       if (!uuid) {
-        return res.status(200).json({
-          error: {
-            category: 'Request',
-            code: '2001',
-            message: 'Missing required parameter: uuid'
-          }
-        });
+        const error = SLAErrorMapper.mapError(
+          { code: 'MISSING_PARAMETER' },
+          null,
+          { parameter: 'uuid' }
+        );
+        return res.status(200).json({ error });
       }
       
       // Find operator and activate
       const { adapter, operatorCode } = await SLASubscriptionController.findSubscriptionOperator(uuid);
       
       if (!adapter) {
-        return res.status(200).json({
-          error: {
-            category: 'Request',
-            code: '2052',
-            message: 'Subscription not found'
-          }
-        });
+        const error = SLAErrorMapper.mapError(
+          { code: 'SUBSCRIPTION_NOT_FOUND' },
+          null,
+          { parameter: 'uuid' }
+        );
+        return res.status(200).json({ error });
       }
       
       // Most adapters don't have separate activate method, they use resume
-      const response = await adapter.resumeSubscription ? 
+      const adapterResponse = await adapter.resumeSubscription ? 
         await adapter.resumeSubscription(uuid) : 
         await adapter.getSubscriptionStatus(uuid);
       
-      const slaResponse = SLASubscriptionController.mapStatusResponse(response, operatorCode);
+      // ✅ PHASE 4: Map response to SLA Digital format using mapper
+      const slaResponse = SLAResponseMapper.mapSubscriptionStatusResponse(adapterResponse, operatorCode);
       
       Logger.info('SLA v2.2 subscription activation requested', {
         endpoint: '/v2.2/subscription/activate',
         operatorCode,
-        uuid
+        uuid,
+        slaUser: req.slaUser?.username?.substring(0, 3) + '***'
       });
       
       res.status(200).json(slaResponse);
@@ -339,10 +368,17 @@ class SLASubscriptionController {
       Logger.error('SLA v2.2 subscription activation failed', {
         endpoint: '/v2.2/subscription/activate',
         error: error.message,
-        uuid: req.query.uuid
+        uuid: req.query.uuid,
+        slaUser: req.slaUser?.username?.substring(0, 3) + '***'
       });
       
-      const slaError = SLASubscriptionController.mapError(error);
+      // ✅ PHASE 4: Map error using error mapper
+      const slaError = SLAErrorMapper.mapError(
+        error,
+        null,
+        { endpoint: '/v2.2/subscription/activate' }
+      );
+      
       res.status(200).json({ error: slaError });
     }
   }
@@ -352,14 +388,14 @@ class SLASubscriptionController {
    * Resumes suspended subscription  
    */
   static async resume(req, res) {
-    // Similar implementation to activate
-    res.status(200).json({
-      error: {
-        category: 'Service',
-        code: '5001',
-        message: 'Resume functionality under development - use activate endpoint'
-      }
-    });
+    // ✅ PHASE 4: SLA compliant "not implemented" response
+    const error = SLAErrorMapper.mapError(
+      { code: 'FEATURE_NOT_SUPPORTED', message: 'Resume functionality under development - use activate endpoint' },
+      null,
+      { endpoint: '/v2.2/subscription/resume' }
+    );
+    
+    res.status(200).json({ error });
   }
   
   /**
@@ -367,14 +403,14 @@ class SLASubscriptionController {
    * Applies free period
    */
   static async free(req, res) {
-    // Implementation for free period
-    res.status(200).json({
-      error: {
-        category: 'Service',
-        code: '5001', 
-        message: 'Free period functionality under development'
-      }
-    });
+    // ✅ PHASE 4: SLA compliant "not implemented" response
+    const error = SLAErrorMapper.mapError(
+      { code: 'FEATURE_NOT_SUPPORTED', message: 'Free period functionality under development' },
+      null,
+      { endpoint: '/v2.2/subscription/free' }
+    );
+    
+    res.status(200).json({ error });
   }
   
   /**
@@ -382,17 +418,17 @@ class SLASubscriptionController {
    * Gets latest subscription for MSISDN
    */
   static async latest(req, res) {
-    // Implementation for latest subscription lookup
-    res.status(200).json({
-      error: {
-        category: 'Service',
-        code: '5001',
-        message: 'Latest subscription lookup under development'
-      }
-    });
+    // ✅ PHASE 4: SLA compliant "not implemented" response  
+    const error = SLAErrorMapper.mapError(
+      { code: 'FEATURE_NOT_SUPPORTED', message: 'Latest subscription lookup under development' },
+      null,
+      { endpoint: '/v2.2/subscription/latest' }
+    );
+    
+    res.status(200).json({ error });
   }
   
-  // ===== HELPER METHODS =====
+  // ===== HELPER METHODS (Unchanged) =====
   
   /**
    * Determine operator from identifier or campaign
@@ -453,7 +489,7 @@ class SLASubscriptionController {
         const adapter = operatorManager.getOperatorAdapter(operator.code);
         const response = await adapter.getSubscriptionStatus(uuid);
         
-        if (response && response.data) {
+        if (response && response.data && response.data.status !== 'DELETED') {
           return { adapter, operatorCode: operator.code };
         }
       } catch (error) {
@@ -462,85 +498,6 @@ class SLASubscriptionController {
     }
     
     return { adapter: null, operatorCode: null };
-  }
-  
-  /**
-   * Map create subscription response to SLA Digital v2.2 format
-   */
-  static mapCreateResponse(response, operatorCode) {
-    const data = response.data || response;
-    
-    return {
-      uuid: data.subscriptionId || data.uuid,
-      status: data.status?.toUpperCase() || 'ACTIVE',
-      msisdn: data.msisdn,
-      amount: data.amount,
-      currency: data.currency,
-      frequency: data.frequency || 'monthly',
-      next_payment_timestamp: data.nextBillingDate,
-      campaign: data.campaign,
-      merchant: data.merchant,
-      auto_renewal: data.autoRenewal !== false,
-      checkout_url: data.checkoutUrl,
-      checkout_required: data.checkoutRequired || false,
-      operator_code: operatorCode
-    };
-  }
-  
-  /**
-   * Map status response to SLA Digital v2.2 format
-   */
-  static mapStatusResponse(response, operatorCode) {
-    const data = response.data || response;
-    
-    return {
-      uuid: data.subscriptionId || data.uuid,
-      status: data.status?.toUpperCase() || 'UNKNOWN',
-      msisdn: data.msisdn,
-      amount: data.amount,
-      currency: data.currency,
-      frequency: data.frequency,
-      next_payment_timestamp: data.nextBillingDate,
-      created_timestamp: data.createdAt,
-      last_payment_timestamp: data.lastPayment,
-      operator_code: operatorCode
-    };
-  }
-  
-  /**
-   * Map delete response to SLA Digital v2.2 format
-   */
-  static mapDeleteResponse(response, operatorCode) {
-    return {
-      uuid: response.data?.subscriptionId || response.data?.uuid,
-      status: 'DELETED',
-      message: 'Subscription cancelled successfully',
-      operator_code: operatorCode
-    };
-  }
-  
-  /**
-   * Map errors to SLA Digital v2.2 format
-   */
-  static mapError(error) {
-    const errorMappings = {
-      'INVALID_MSISDN': { category: 'Request', code: '2001' },
-      'INVALID_PIN_FORMAT': { category: 'Request', code: '4001' },
-      'PIN_EXPIRED': { category: 'Request', code: '4002' },
-      'INSUFFICIENT_FUNDS': { category: 'Service', code: '2015' },
-      'SUBSCRIPTION_EXISTS': { category: 'Service', code: '2032' },
-      'SUBSCRIPTION_NOT_FOUND': { category: 'Request', code: '2052' },
-      'OPERATOR_DISABLED': { category: 'Service', code: '5002' },
-      'OPERATOR_NOT_FOUND': { category: 'Request', code: '2001' }
-    };
-    
-    const mapping = errorMappings[error.code] || { category: 'Server', code: '5001' };
-    
-    return {
-      category: mapping.category,
-      code: mapping.code,
-      message: error.message || 'Unknown error occurred'
-    };
   }
 }
 
