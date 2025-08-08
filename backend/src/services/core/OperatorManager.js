@@ -1,11 +1,11 @@
 /**
- * Operator Manager - SINGLETON PATTERN - 100% OPERATOR COVERAGE
+ * Operator Manager - SINGLETON PATTERN - ACCURATE COVERAGE REPORTING
  * 
  * Central service for managing operator lifecycle, enable/disable functionality,
- * and operator health monitoring. COMPLETE with ALL SLA Digital operators implemented.
+ * and operator health monitoring. Currently supports 24/26 SLA Digital operators.
  * 
  * SINGLETON: Ensures only one instance manages health monitoring.
- * STATUS: 100% SLA Digital operator documentation compliance achieved
+ * STATUS: 92.3% SLA Digital operator documentation compliance (24/26 operators)
  */
 
 const Logger = require('../../utils/logger');
@@ -93,7 +93,7 @@ class OperatorManager extends EventEmitter {
    */
   async _performInitialization() {
     try {
-      Logger.info('🚀 Initializing OperatorManager singleton with 100% operator coverage...');
+      Logger.info('🚀 Initializing OperatorManager singleton - 24/26 operators supported (92.3% coverage)');
       
       // 🔧 FIXED: Import models after they are initialized
       const { getModels } = require('../../models');
@@ -115,10 +115,11 @@ class OperatorManager extends EventEmitter {
       // 🔧 START HEALTH MONITORING ONLY ONCE
       this.startHealthMonitoring();
       
-      Logger.info('✅ OperatorManager singleton initialized successfully - 100% COVERAGE ACHIEVED', {
+      Logger.info('✅ OperatorManager singleton initialized successfully', {
         operatorCount: operators.length,
         operators: operators.map(op => op.code),
-        coverage: '100%',
+        coverage: '92.3%',
+        supportedOperators: '24/26',
         instanceId: this.constructor.name
       });
       
@@ -174,11 +175,11 @@ class OperatorManager extends EventEmitter {
   }
   
   /**
-   * Get adapter class for operator code - ✅ PHASE 3 COMPLETE: ALL SLA Digital operators implemented
+   * Get adapter class for operator code - 24/26 SLA Digital operators implemented
    */
   getAdapterClass(operatorCode) {
     const adapterMappings = {
-      // ===== INDIVIDUAL ADAPTERS (8) - ✅ COMPLETE =====
+      // ===== INDIVIDUAL ADAPTERS (13) - ✅ COMPLETE =====
       
       // ✅ FIXED: Zain operators with correct adapter paths
       'zain-kw': () => require('../../adapters/zain-kw/ZainKuwaitAdapter'),
@@ -196,7 +197,22 @@ class OperatorManager extends EventEmitter {
       'ooredoo-kw': () => require('../../adapters/ooredoo-kw/OoredooAdapter'),
       'stc-kw': () => require('../../adapters/stc-kw/STCKuwaitAdapter'),
       
-      // ===== MULTI-COUNTRY ADAPTERS (16) - ✅ COMPLETE =====
+      // ✅ NEW: Individual operator adapters (4)
+      'mobile-ng': () => require('../../adapters/mobile-ng/NineMobileAdapter'),
+      '9mobile-ng': () => require('../../adapters/mobile-ng/NineMobileAdapter'), // Alternative code
+      'axiata-lk': () => require('../../adapters/axiata-lk/AxiataAdapter'),
+      'dialog-lk': () => require('../../adapters/axiata-lk/AxiataAdapter'), // Alternative code
+      'viettel-mz': () => require('../../adapters/viettel-mz/ViettelAdapter'),
+      'movitel-mz': () => require('../../adapters/viettel-mz/ViettelAdapter'), // Alternative code
+      'umobile-my': () => require('../../adapters/umobile-my/UMobileAdapter'),
+      
+      // ✅ UK operators - Individual adapters
+      'voda-uk': () => require('../../adapters/vodafone/VodafoneAdapter'),
+      'three-uk': () => require('../../adapters/three/ThreeAdapter'),
+      'o2-uk': () => require('../../adapters/other/OtherOperatorsAdapter'),
+      'ee-uk': () => require('../../adapters/other/OtherOperatorsAdapter'),
+      
+      // ===== MULTI-COUNTRY ADAPTERS (11) - ✅ COMPLETE =====
       
       // Zain Multi-Country (4 countries)
       'zain-bh': () => require('../../adapters/zain-multi/ZainMultiAdapter'), // Bahrain
@@ -212,36 +228,11 @@ class OperatorManager extends EventEmitter {
       'telenor-se': () => require('../../adapters/telenor/TelenorAdapter'),
       'telenor-rs': () => require('../../adapters/telenor/TelenorAdapter'),
       
-      // Vodafone Multi-Country (2 countries) - ✅ ENHANCED with UK/IE features
-      'voda-uk': () => require('../../adapters/vodafone/VodafoneAdapter'),
+      // Vodafone Multi-Country (1 country) - ✅ ENHANCED
       'vf-ie': () => require('../../adapters/vodafone/VodafoneAdapter'),
       
-      // Three Multi-Country (2 countries) - ✅ ENHANCED with UK features
-      'three-uk': () => require('../../adapters/three/ThreeAdapter'),
+      // Three Multi-Country (1 country) - ✅ ENHANCED
       'three-ie': () => require('../../adapters/three/ThreeAdapter'),
-      
-      // ===== INDIVIDUAL OPERATOR ADAPTERS (4) - ✅ PHASE 3 NEW ADDITIONS =====
-      
-      // ✅ NEW: 9mobile Nigeria - Individual adapter
-      'mobile-ng': () => require('../../adapters/mobile-ng/NineMobileAdapter'),
-      '9mobile-ng': () => require('../../adapters/mobile-ng/NineMobileAdapter'), // Alternative code
-      
-      // ✅ NEW: Axiata Dialog Sri Lanka - Individual adapter  
-      'axiata-lk': () => require('../../adapters/axiata-lk/AxiataAdapter'),
-      'dialog-lk': () => require('../../adapters/axiata-lk/AxiataAdapter'), // Alternative code
-      
-      // ✅ NEW: Movitel Mozambique - Individual adapter
-      'viettel-mz': () => require('../../adapters/viettel-mz/ViettelAdapter'),
-      'movitel-mz': () => require('../../adapters/viettel-mz/ViettelAdapter'), // Alternative code
-      
-      // ✅ NEW: U Mobile Malaysia - Individual adapter
-      'umobile-my': () => require('../../adapters/umobile-my/UMobileAdapter'),
-      
-      // ===== OTHER OPERATORS ADAPTER (2) - ✅ UK OPERATORS ONLY =====
-      
-      // UK operators - ✅ ENHANCED with Fonix checkout
-      'o2-uk': () => require('../../adapters/other/OtherOperatorsAdapter'),
-      'ee-uk': () => require('../../adapters/other/OtherOperatorsAdapter'),
       
       // ===== GENERIC FALLBACK =====
       'generic': () => require('../../adapters/generic/GenericSLAdapter')
@@ -563,11 +554,12 @@ class OperatorManager extends EventEmitter {
       await this.performHealthChecks();
     }, interval);
     
-    Logger.info('🔄 Operator health monitoring started - 100% coverage', {
+    Logger.info('🔄 Operator health monitoring started', {
       interval: `${interval / 1000}s`,
       instanceId: this.constructor.name,
       monitoringActive: !!this.healthCheckInterval,
-      coverage: '100%'
+      coverage: '92.3%',
+      supportedOperators: '24/26'
     });
   }
   
@@ -584,11 +576,12 @@ class OperatorManager extends EventEmitter {
     const successful = results.filter(r => r.status === 'fulfilled').length;
     const failed = results.filter(r => r.status === 'rejected').length;
     
-    Logger.debug('Health checks completed - 100% coverage', {
+    Logger.debug('Health checks completed', {
       total: results.length,
       successful,
       failed,
-      coverage: '100%'
+      coverage: '92.3%',
+      supportedOperators: '24/26'
     });
   }
   
@@ -698,18 +691,15 @@ class OperatorManager extends EventEmitter {
   }
   
   /**
-   * ✅ PHASE 3 COMPLETE: Get supported operators list - 24/24 SLA Digital operators
+   * Get supported operators list - ACCURATE: 24/26 SLA Digital operators implemented
    */
   getSupportedOperators() {
     return [
-      // ===== INDIVIDUAL ADAPTERS (12) =====
+      // ===== INDIVIDUAL ADAPTERS (13) =====
       
       // Zain operators - ✅ FIXED
-      { code: 'zain-kw', name: 'Zain Kuwait', country: 'Kuwait', currency: 'KWD', adapter: 'individual', status: '✅ FIXED', fixes: ['5-digit PIN', 'SDP mapping', 'Special checkout'] },
+      { code: 'zain-kw', name: 'Zain Kuwait', country: 'Kuwait', currency: 'KWD', adapter: 'individual', status: '✅ FIXED', fixes: ['4-digit PIN', 'SDP mapping', 'Special checkout'] },
       { code: 'zain-sa', name: 'Zain Saudi Arabia', country: 'Saudi Arabia', currency: 'SAR', adapter: 'individual', status: '✅ FIXED', fixes: ['SDP mapping', 'PIN+amount'] },
-      
-      // Mobily operators - ✅ FIXED  
-      { code: 'mobily-sa', name: 'Mobily Saudi Arabia', country: 'Saudi Arabia', currency: 'SAR', adapter: 'individual', status: '✅ FIXED', fixes: ['4-digit PIN', 'Arabic/English', 'KSA compliance'] },
       
       // Enhanced operators - ✅ ENHANCED
       { code: 'etisalat-ae', name: 'Etisalat UAE', country: 'UAE', currency: 'AED', adapter: 'individual', status: '✅ ENHANCED', fixes: ['fraud_token support'] },
@@ -718,17 +708,19 @@ class OperatorManager extends EventEmitter {
       { code: 'ooredoo-kw', name: 'Ooredoo Kuwait', country: 'Kuwait', currency: 'KWD', adapter: 'individual', status: '✅ READY' },
       { code: 'stc-kw', name: 'STC Kuwait', country: 'Kuwait', currency: 'KWD', adapter: 'individual', status: '✅ READY' },
       
-      // ✅ PHASE 3 NEW: Individual operator adapters (4)
-      { code: 'mobile-ng', name: '9mobile Nigeria', country: 'Nigeria', currency: 'NGN', adapter: 'individual', status: '✅ NEW', fixes: ['auto_renewal support', 'NGN currency'] },
-      { code: 'axiata-lk', name: 'Dialog Sri Lanka', country: 'Sri Lanka', currency: 'LKR', adapter: 'individual', status: '✅ NEW', fixes: ['LKR currency', 'checkout flow'] },
-      { code: 'viettel-mz', name: 'Movitel Mozambique', country: 'Mozambique', currency: 'MZN', adapter: 'individual', status: '✅ NEW', fixes: ['MZN currency', 'Portuguese language'] },
-      { code: 'umobile-my', name: 'U Mobile Malaysia', country: 'Malaysia', currency: 'MYR', adapter: 'individual', status: '✅ NEW', fixes: ['Dual flow support', 'RM300 monthly limit', 'RM250 daily limit'] },
+      // Individual operator adapters
+      { code: 'mobile-ng', name: '9mobile Nigeria', country: 'Nigeria', currency: 'NGN', adapter: 'individual', status: '✅ READY' },
+      { code: 'axiata-lk', name: 'Dialog Sri Lanka', country: 'Sri Lanka', currency: 'LKR', adapter: 'individual', status: '✅ READY' },
+      { code: 'viettel-mz', name: 'Movitel Mozambique', country: 'Mozambique', currency: 'MZN', adapter: 'individual', status: '✅ READY' },
+      { code: 'umobile-my', name: 'U Mobile Malaysia', country: 'Malaysia', currency: 'MYR', adapter: 'individual', status: '✅ READY' },
       
       // UK operators - ✅ ENHANCED  
-      { code: 'o2-uk', name: 'O2 UK', country: 'United Kingdom', currency: 'GBP', adapter: 'individual', status: '✅ ENHANCED', fixes: ['Fonix checkout', 'UK unified flow'] },
-      { code: 'ee-uk', name: 'EE UK', country: 'United Kingdom', currency: 'GBP', adapter: 'individual', status: '✅ ENHANCED', fixes: ['Fonix checkout', 'UK unified flow'] },
+      { code: 'voda-uk', name: 'Vodafone UK', country: 'United Kingdom', currency: 'GBP', adapter: 'individual', status: '✅ ENHANCED', fixes: ['Checkout only', 'No SMS'] },
+      { code: 'three-uk', name: 'Three UK', country: 'United Kingdom', currency: 'GBP', adapter: 'individual', status: '✅ ENHANCED', fixes: ['Checkout only', 'No SMS'] },
+      { code: 'o2-uk', name: 'O2 UK', country: 'United Kingdom', currency: 'GBP', adapter: 'individual', status: '✅ ENHANCED', fixes: ['Checkout only', 'No SMS'] },
+      { code: 'ee-uk', name: 'EE UK', country: 'United Kingdom', currency: 'GBP', adapter: 'individual', status: '✅ ENHANCED', fixes: ['Checkout only', 'No SMS'] },
       
-      // ===== MULTI-COUNTRY ADAPTERS (12) =====
+      // ===== MULTI-COUNTRY ADAPTERS (11) =====
       
       // Zain Multi-Country (4)
       { code: 'zain-bh', name: 'Zain Bahrain', country: 'Bahrain', currency: 'BHD', adapter: 'multi', status: '✅ READY' },
@@ -744,25 +736,25 @@ class OperatorManager extends EventEmitter {
       { code: 'telenor-se', name: 'Telenor Sweden', country: 'Sweden', currency: 'SEK', adapter: 'multi', status: '✅ ENHANCED', fixes: ['ACR support'] },
       { code: 'telenor-rs', name: 'Yettel Serbia', country: 'Serbia', currency: 'RSD', adapter: 'multi', status: '✅ ENHANCED', fixes: ['ACR support'] },
       
-      // Vodafone Multi-Country (2) - ✅ ENHANCED
-      { code: 'voda-uk', name: 'Vodafone UK', country: 'United Kingdom', currency: 'GBP', adapter: 'multi', status: '✅ ENHANCED', fixes: ['Fonix checkout', 'UK unified flow'] },
+      // Vodafone Multi-Country (1) - ✅ ENHANCED
       { code: 'vf-ie', name: 'Vodafone Ireland', country: 'Ireland', currency: 'EUR', adapter: 'multi', status: '✅ ENHANCED', fixes: ['MO SMS support', 'PIN flow'] },
       
-      // Three Multi-Country (2) - ✅ ENHANCED
-      { code: 'three-uk', name: 'Three UK', country: 'United Kingdom', currency: 'GBP', adapter: 'multi', status: '✅ ENHANCED', fixes: ['Fonix checkout', 'UK unified flow'] },
+      // Three Multi-Country (1) - ✅ READY
       { code: 'three-ie', name: 'Three Ireland', country: 'Ireland', currency: 'EUR', adapter: 'multi', status: '✅ READY' }
     ];
   }
   
   /**
-   * Get operator statistics - ✅ PHASE 3 COMPLETE: 24/24 operators (100%)
+   * Get operator statistics - ACCURATE: 24/26 operators (92.3% coverage)
    */
   getOperatorStatistics() {
     const supportedOperators = this.getSupportedOperators();
     const registeredOperators = Array.from(this.operators.keys());
+    const totalDocumentedOperators = 26; // From official SLA Digital documentation
     
     const stats = {
-      total: supportedOperators.length, // 24 operators
+      total: supportedOperators.length, // 24 operators implemented
+      documented: totalDocumentedOperators, // 26 operators in official docs
       registered: registeredOperators.length,
       enabled: 0,
       disabled: 0,
@@ -772,9 +764,11 @@ class OperatorManager extends EventEmitter {
       enhanced: supportedOperators.filter(op => op.status?.includes('ENHANCED')).length,
       ready: supportedOperators.filter(op => op.status?.includes('READY')).length,
       new: supportedOperators.filter(op => op.status?.includes('NEW')).length,
-      coverage: '100%', // 🎯 24/24 ACHIEVED
-      compliance: 'SLA Digital v2.2 Complete - Phase 3 Complete',
-      phase: 'Phase 3 Complete: All adapter mappings updated',
+      coverage: '92.3%', // 24/26 = 92.3%
+      coverageRatio: `${supportedOperators.length}/${totalDocumentedOperators}`,
+      compliance: 'SLA Digital v2.2 - High Compliance',
+      phase: 'Phase 1 Complete: Critical fixes applied',
+      remainingOperators: totalDocumentedOperators - supportedOperators.length,
       byAdapter: {
         individual: 0,
         multi: 0,
@@ -822,11 +816,11 @@ class OperatorManager extends EventEmitter {
     _singletonInstance = null;
     _initializationPromise = null;
     
-    Logger.info('🧹 OperatorManager singleton cleaned up - Phase 3 complete - 100% coverage');
+    Logger.info('🧹 OperatorManager singleton cleaned up - Phase 1 complete - 92.3% coverage');
   }
   
   /**
-   * 🔧 SINGLETON STATUS CHECK - PHASE 3 COMPLETE
+   * 🔧 SINGLETON STATUS CHECK - ACCURATE REPORTING
    */
   static getSingletonStatus() {
     return {
@@ -835,10 +829,12 @@ class OperatorManager extends EventEmitter {
       isInitializing: _singletonInstance?._isInitializing || false,
       healthMonitoringActive: !!_singletonInstance?.healthCheckInterval,
       operatorCount: _singletonInstance?.operators.size || 0,
-      coverage: '100%',
-      compliance: 'SLA Digital v2.2 Complete',
-      phase: 'Phase 3 Complete: Adapter mappings updated',
-      totalSupportedOperators: 24
+      coverage: '92.3%',
+      coverageRatio: '24/26',
+      compliance: 'SLA Digital v2.2 - High Compliance',
+      phase: 'Phase 1 Complete: Critical fixes applied',
+      totalSupportedOperators: 24,
+      totalDocumentedOperators: 26
     };
   }
 }
