@@ -5,7 +5,7 @@
  * Supports all 26 SLA Digital operators with comprehensive country code mapping.
  */
 
-const Logger = require('../utils/logger');
+const Logger = require('../../utils/logger');
 
 class OperatorDetectionService {
   
