@@ -2,8 +2,8 @@
  * Zain Kuwait Adapter - SLA v2.2 COMPLIANT
  * 
  * Implements SLA Digital integration specific to Zain Kuwait operator.
- * Features: 5-digit PIN, special checkout endpoint, Arabic/English support, SDP status mapping
- * FIXED: Now fully SLA v2.2 compliant with query string parameters
+ * Features: 4-digit PIN, special checkout endpoint, Arabic/English support, SDP status mapping
+ * FIXED: Now fully SLA v2.2 compliant with query string parameters and correct 4-digit PIN
  */
 
 const BaseAdapter = require('../base/BaseAdapter');
@@ -58,10 +58,10 @@ class ZainKuwaitAdapter extends BaseAdapter {
       // Apply business rules including weekly subscription limit
       const validatedParams = this.applyBusinessRules('createSubscription', params);
       
-      // FIXED: Validate PIN format (5 digits for Zain Kuwait per SLA Digital documentation)
-      if (!/^\d{5}$/.test(params.pin)) {
+      // FIXED: Validate PIN format (4 digits for Zain Kuwait per official SLA Digital documentation)
+      if (!/^\d{4}$/.test(params.pin)) {
         throw new UnifiedError('INVALID_PIN_FORMAT', 
-          'Zain Kuwait requires 5-digit PIN per SLA Digital documentation');
+          'Zain Kuwait requires 4-digit PIN per official SLA Digital documentation');
       }
       
       // Normalize MSISDN
@@ -278,8 +278,8 @@ class ZainKuwaitAdapter extends BaseAdapter {
       '2001': { code: 'INVALID_MSISDN', message: 'Invalid phone number format for Kuwait' },
       '2015': { code: 'INSUFFICIENT_FUNDS', message: 'Insufficient balance to complete transaction' },
       '2032': { code: 'WEEKLY_SUBSCRIPTION_LIMIT', message: 'Customer can subscribe only once per week' }, // Zain KW specific
-      '4001': { code: 'INVALID_PIN', message: 'Invalid or expired 5-digit PIN' }, // Updated message
-      '4002': { code: 'PIN_EXPIRED', message: 'PIN has expired, please request a new 5-digit PIN' }, // Updated message
+      '4001': { code: 'INVALID_PIN', message: 'Invalid or expired 4-digit PIN' }, // FIXED: Updated to 4-digit
+      '4002': { code: 'PIN_EXPIRED', message: 'PIN has expired, please request a new 4-digit PIN' }, // FIXED: Updated to 4-digit
       '1003': { code: 'RATE_LIMIT_EXCEEDED', message: 'Too many requests, please try again later' },
       'SUB_EXISTS': { code: 'SUBSCRIPTION_EXISTS', message: 'Customer already has an active subscription' },
       'SUB_NOT_FOUND': { code: 'SUBSCRIPTION_NOT_FOUND', message: 'Subscription not found' },
