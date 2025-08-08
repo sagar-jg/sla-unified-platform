@@ -10,6 +10,7 @@
 const Logger = require('../utils/logger');
 const { UnifiedError } = require('../utils/errors');
 const { getInstance: getOperatorManager } = require('../services/core/OperatorManager');
+const OperatorDetectionService = require('../services/core/OperatorDetectionService');
 
 class SLAEligibilityController {
   
@@ -53,8 +54,18 @@ class SLAEligibilityController {
         });
       }
       
-      // Determine operator
-      const operatorCode = await SLAEligibilityController.determineOperator(identifier, campaign);
+      // ✅ FIXED: Use centralized operator detection service
+      const operatorCode = await OperatorDetectionService.determineOperator(identifier, campaign);
+      
+      if (!operatorCode) {
+        return res.status(200).json({
+          error: {
+            category: 'Request',
+            code: '2001',
+            message: 'Unable to determine operator from identifier'
+          }
+        });
+      }
       
       // Get operator manager and adapter
       const operatorManager = getOperatorManager();
@@ -75,19 +86,38 @@ class SLAEligibilityController {
       // Call adapter to check eligibility
       const response = await adapter.checkEligibility(identifier);
       
+      // Get operator information for enhanced response
+      const operatorInfo = OperatorDetectionService.getOperatorInfo(operatorCode);
+      
       // Map response to SLA Digital format
       const slaResponse = {
         eligible: response.data?.eligible !== false,
         reason: response.data?.eligibilityReason || 'Customer is eligible',
-        operator_code: operatorCode,
+        
+        // Customer details
         msisdn: identifier.length !== 48 ? identifier : undefined,
         acr: identifier.length === 48 ? identifier : undefined,
-        timestamp: new Date().toISOString()
+        
+        // Eligibility details
+        max_amount: response.data?.maxAmount?.toString() || SLAEligibilityController.getMaxAmountForOperator(operatorCode),
+        currency: operatorInfo.currency,
+        daily_limit: response.data?.dailyLimit?.toString(),
+        monthly_limit: response.data?.monthlyLimit?.toString(),
+        
+        // Restrictions
+        existing_subscriptions: response.data?.existingSubscriptions || 0,
+        subscription_limit_reached: response.data?.subscriptionLimitReached || false,
+        
+        // Metadata
+        operator_code: operatorCode,
+        timestamp: new Date().toISOString(),
+        campaign
       };
       
       Logger.info('SLA v2.2 eligibility check completed', {
         endpoint: '/v2.2/eligibility',
         operatorCode,
+        operatorName: operatorInfo.name,
         eligible: slaResponse.eligible,
         identifier: identifier ? identifier.substring(0, 6) + '***' : 'unknown'
       });
@@ -111,13 +141,40 @@ class SLAEligibilityController {
     }
   }
   
-  static async determineOperator(identifier, campaign) {
-    // Reuse operator detection logic from PIN controller
-    if (identifier.length === 48) return 'telenor-mm';
-    if (identifier.startsWith('+965')) return 'zain-kw';
-    if (identifier.startsWith('+971')) return 'etisalat-ae';
-    if (identifier.startsWith('+966')) return 'zain-sa';
-    return 'zain-kw'; // Default
+  /**
+   * Get maximum amount for operator
+   */
+  static getMaxAmountForOperator(operatorCode) {
+    const maxAmountMapping = {
+      'zain-kw': '30',       // KWD
+      'zain-bh': '50',       // BHD ✅ FIXED
+      'zain-sa': '30',       // SAR
+      'zain-iq': '50',       // IQD
+      'zain-jo': '20',       // JOD
+      'zain-sd': '100',      // SDG
+      'etisalat-ae': '365',  // AED
+      'mobily-sa': '30',     // SAR
+      'ooredoo-kw': '30',    // KWD
+      'stc-kw': '30',        // KWD
+      'telenor-dk': '5000',  // DKK
+      'telenor-no': '5000',  // NOK
+      'telenor-se': '5000',  // SEK
+      'telenor-rs': '10000', // RSD
+      'telenor-mm': '10000', // MMK
+      'telenor-digi': '100', // MYR
+      'umobile-my': '300',   // MYR
+      'voda-uk': '50',       // GBP
+      'three-uk': '50',      // GBP
+      'o2-uk': '50',         // GBP
+      'ee-uk': '50',         // GBP
+      'three-ie': '50',      // EUR
+      'vf-ie': '30',         // EUR
+      'axiata-lk': '5000',   // LKR
+      'mobile-ng': '10000',  // NGN
+      'viettel-mz': '1000'   // MZN
+    };
+    
+    return maxAmountMapping[operatorCode] || '100';
   }
 }
 
