@@ -154,8 +154,8 @@ router.get('/', (req, res) => {
   res.json({
     api: 'SLA Digital v2.2 API',
     version: '2.2',
-    compliance: '100%',
-    description: 'SLA Digital Direct Carrier Billing API - Fully Compliant Implementation',
+    compliance: '92.3%',
+    description: 'SLA Digital Direct Carrier Billing API - High Compliance Implementation',
     base_url: 'https://api.sla-alacrity.com/v2.2',
     authentication: 'HTTP Basic Auth + IP Whitelisting',
     documentation: 'https://docs.sla-alacrity.com/docs/',
@@ -196,7 +196,7 @@ router.get('/', (req, res) => {
       }
     },
     
-    // Supported operators (all 26)
+    // Supported operators (24 out of 26)
     operators: {
       individual_adapters: [
         'zain-kw', 'zain-sa', 'mobily-sa', 'etisalat-ae', 'ooredoo-kw', 'stc-kw',
@@ -254,7 +254,7 @@ router.get('/health', (req, res) => {
     status: 'healthy',
     api: 'SLA Digital v2.2',
     version: '2.2',
-    compliance: '100%',
+    compliance: '92.3%',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     
@@ -267,7 +267,7 @@ router.get('/health', (req, res) => {
     },
     
     total_endpoints: 14,
-    operators_supported: 26,
+    operators_supported: 24,
     environment: process.env.NODE_ENV || 'development',
     
     // ✅ PHASE 3: Authentication status
