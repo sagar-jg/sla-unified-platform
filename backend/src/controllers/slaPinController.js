@@ -10,6 +10,7 @@
 const Logger = require('../utils/logger');
 const { UnifiedError } = require('../utils/errors');
 const { getInstance: getOperatorManager } = require('../services/core/OperatorManager');
+const OperatorDetectionService = require('../services/core/OperatorDetectionService');
 
 class SLAPinController {
   
@@ -78,8 +79,8 @@ class SLAPinController {
         });
       }
       
-      // Determine operator from identifier
-      const operatorCode = await SLAPinController.determineOperator(identifier, campaign);
+      // ✅ FIXED: Use centralized operator detection service
+      const operatorCode = await OperatorDetectionService.determineOperator(identifier, campaign);
       
       if (!operatorCode) {
         return res.status(200).json({
@@ -147,18 +148,24 @@ class SLAPinController {
       // Call adapter to generate PIN
       const response = await adapter.generatePIN(identifier, campaign, adapterParams);
       
+      // Get operator information for enhanced response
+      const operatorInfo = OperatorDetectionService.getOperatorInfo(operatorCode);
+      
       // Map response to SLA Digital v2.2 format
-      const slaResponse = SLAPinController.mapPinResponse(response, operatorCode, {
+      const slaResponse = SLAPinController.mapPinResponse(response, operatorCode, operatorInfo, {
         identifier,
         campaign,
         merchant,
         template,
-        language
+        language,
+        correlator,
+        fraud_token
       });
       
       Logger.info('SLA v2.2 PIN generated successfully', {
         endpoint: '/v2.2/pin',
         operatorCode,
+        operatorName: operatorInfo.name,
         identifier: identifier ? identifier.substring(0, 6) + '***' : 'unknown',
         campaign,
         template
@@ -184,121 +191,30 @@ class SLAPinController {
   // ===== HELPER METHODS =====
   
   /**
-   * Determine operator from identifier or campaign
-   */
-  static async determineOperator(identifier, campaign) {
-    // ACR is 48 characters - typically Telenor
-    if (identifier.length === 48) {
-      // Default to Myanmar for ACR, but could be other Telenor countries
-      if (campaign && campaign.toLowerCase().includes('denmark')) return 'telenor-dk';
-      if (campaign && campaign.toLowerCase().includes('norway')) return 'telenor-no';
-      if (campaign && campaign.toLowerCase().includes('sweden')) return 'telenor-se';
-      if (campaign && campaign.toLowerCase().includes('serbia')) return 'telenor-rs';
-      if (campaign && campaign.toLowerCase().includes('malaysia')) return 'telenor-digi';
-      
-      return 'telenor-mm'; // Default ACR to Myanmar
-    }
-    
-    // MSISDN-based operator detection
-    const operatorMappings = {
-      // Kuwait operators
-      '+965': { '5': 'zain-kw', '6': 'zain-kw', '9': 'ooredoo-kw', '5555': 'stc-kw' },
-      
-      // UAE operators  
-      '+971': { '50': 'etisalat-ae', '52': 'etisalat-ae', '54': 'etisalat-ae', '56': 'etisalat-ae' },
-      
-      // Saudi Arabia operators
-      '+966': { '50': 'zain-sa', '51': 'mobily-sa', '52': 'zain-sa', '53': 'mobily-sa', '54': 'zain-sa', '55': 'mobily-sa' },
-      
-      // Nigeria
-      '+234': { '809': 'mobile-ng', '817': 'mobile-ng', '818': 'mobile-ng', '908': 'mobile-ng', '909': 'mobile-ng' },
-      
-      // Sri Lanka
-      '+94': { '77': 'axiata-lk', '76': 'axiata-lk', '78': 'axiata-lk' },
-      
-      // Malaysia
-      '+60': { '10': 'telenor-digi', '11': 'telenor-digi', '14': 'telenor-digi', '16': 'telenor-digi', '17': 'umobile-my', '18': 'umobile-my', '19': 'umobile-my' },
-      
-      // Myanmar
-      '+95': { '9': 'telenor-mm' },
-      
-      // Denmark
-      '+45': { '2': 'telenor-dk', '3': 'telenor-dk', '4': 'telenor-dk', '5': 'telenor-dk' },
-      
-      // Norway
-      '+47': { '4': 'telenor-no', '9': 'telenor-no' },
-      
-      // Sweden
-      '+46': { '70': 'telenor-se', '73': 'telenor-se', '76': 'telenor-se', '79': 'telenor-se' },
-      
-      // Serbia
-      '+381': { '60': 'telenor-rs', '61': 'telenor-rs', '62': 'telenor-rs', '63': 'telenor-rs', '64': 'telenor-rs', '65': 'telenor-rs', '66': 'telenor-rs' },
-      
-      // UK (generic - would need more specific detection)
-      '+44': { '7': 'voda-uk' }, // Default to Vodafone UK
-      
-      // Ireland
-      '+353': { '83': 'three-ie', '85': 'three-ie', '86': 'three-ie', '87': 'vf-ie', '89': 'vf-ie' }
-    };
-    
-    // Extract country code
-    let normalizedMSISDN = identifier.replace(/[\s\-\(\)]/g, '');
-    if (!normalizedMSISDN.startsWith('+')) {
-      normalizedMSISDN = '+' + normalizedMSISDN;
-    }
-    
-    for (const [countryCode, prefixMap] of Object.entries(operatorMappings)) {
-      if (normalizedMSISDN.startsWith(countryCode)) {
-        const remainingNumber = normalizedMSISDN.substring(countryCode.length);
-        
-        // Try different prefix lengths
-        for (let len = 3; len >= 1; len--) {
-          const prefix = remainingNumber.substring(0, len);
-          if (prefixMap[prefix]) {
-            return prefixMap[prefix];
-          }
-        }
-        
-        // Return first operator for country if no specific match
-        return Object.values(prefixMap)[0];
-      }
-    }
-    
-    // Fallback based on campaign
-    if (campaign) {
-      const campaignLower = campaign.toLowerCase();
-      if (campaignLower.includes('zain')) return 'zain-kw';
-      if (campaignLower.includes('etisalat')) return 'etisalat-ae';
-      if (campaignLower.includes('mobily')) return 'mobily-sa';
-      if (campaignLower.includes('telenor')) return 'telenor-dk';
-      if (campaignLower.includes('three')) return 'three-uk';
-      if (campaignLower.includes('vodafone')) return 'voda-uk';
-    }
-    
-    // Default fallback
-    return 'zain-kw';
-  }
-  
-  /**
    * Map PIN response to SLA Digital v2.2 format
    */
-  static mapPinResponse(response, operatorCode, originalParams) {
-    const data = response.data || response;
-    
+  static mapPinResponse(response, operatorCode, operatorInfo, originalParams) {
     return {
       pin_sent: true,
       message: 'PIN sent successfully',
       expires_in: 120, // 2 minutes per SLA Digital specification
-      template: originalParams.template || 'subscription',
-      language: originalParams.language || 'en',
-      operator_code: operatorCode,
       
-      // Additional fields that might be returned
+      // PIN details
       pin_length: SLAPinController.getPinLength(operatorCode),
       delivery_method: 'SMS',
-      timestamp: new Date().toISOString(),
+      template: originalParams.template || 'subscription',
+      language: originalParams.language || 'en',
       
-      // If fraud token was used (Etisalat UAE specific)
+      // Timestamps
+      timestamp: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 120 * 1000).toISOString(),
+      
+      // Operator information
+      operator_code: operatorCode,
+      operator_name: operatorInfo.name,
+      currency: operatorInfo.currency,
+      
+      // Security features
       fraud_token_used: !!originalParams.fraud_token,
       
       // For ACR transactions (Telenor)
@@ -313,10 +229,19 @@ class SLAPinController {
    */
   static getPinLength(operatorCode) {
     const pinLengths = {
-      'zain-kw': 5,      // Zain Kuwait uses 5-digit PIN
-      'mobily-sa': 4,    // Mobily Saudi uses 4-digit PIN
-      'etisalat-ae': 5,  // Etisalat UAE uses 5-digit PIN
-      'telenor-digi': 6, // Telenor Digi Malaysia uses 6-digit PIN
+      'zain-kw': 5,        // Zain Kuwait uses 5-digit PIN
+      'zain-bh': 5,        // Zain Bahrain uses 5-digit PIN ✅ FIXED
+      'zain-sa': 5,        // Zain Saudi uses 5-digit PIN
+      'zain-iq': 5,        // Zain Iraq uses 5-digit PIN
+      'zain-jo': 5,        // Zain Jordan uses 5-digit PIN
+      'zain-sd': 5,        // Zain Sudan uses 5-digit PIN
+      'mobily-sa': 4,      // Mobily Saudi uses 4-digit PIN
+      'etisalat-ae': 5,    // Etisalat UAE uses 5-digit PIN
+      'ooredoo-kw': 5,     // Ooredoo Kuwait uses 5-digit PIN
+      'stc-kw': 5,         // STC Kuwait uses 5-digit PIN
+      'telenor-digi': 6,   // Telenor Digi Malaysia uses 6-digit PIN
+      'umobile-my': 5,     // U Mobile Malaysia uses 5-digit PIN
+      'vf-ie': 5           // Vodafone Ireland uses 5-digit PIN
     };
     
     return pinLengths[operatorCode] || 5; // Default to 5 digits
@@ -354,7 +279,11 @@ class SLAPinController {
     // Operators that support PIN generation (direct API flow)
     const pinSupportedOperators = [
       'zain-kw',      // Zain Kuwait supports PIN
+      'zain-bh',      // Zain Bahrain supports PIN ✅ FIXED
       'zain-sa',      // Zain Saudi supports PIN
+      'zain-iq',      // Zain Iraq supports PIN
+      'zain-jo',      // Zain Jordan supports PIN
+      'zain-sd',      // Zain Sudan supports PIN
       'mobily-sa',    // Mobily Saudi supports PIN
       'etisalat-ae',  // Etisalat UAE supports PIN
       'ooredoo-kw',   // Ooredoo Kuwait supports PIN
@@ -378,7 +307,7 @@ class SLAPinController {
       'ee-uk',        // EE UK - checkout only
       'mobile-ng',    // 9mobile Nigeria - checkout only
       'axiata-lk',    // Dialog Sri Lanka - checkout only
-      'viettel-mz'    // Movitel Mozambique - checkout only
+      'viettel-mz'    // Viettel Mozambique - checkout only
     ];
     
     if (checkoutOnlyOperators.includes(operatorCode)) {
