@@ -20,18 +20,17 @@ module.exports = {
     const hashedPassword = await bcrypt.hash('admin123!', 12);
     const now = new Date();
 
-    // ✅ FIXED: Using correct database column names (snake_case)
+    // ✅ FIXED: Using 'name' field instead of first_name/last_name
     await queryInterface.bulkInsert('users', [
       {
         id: uuidv4(),
+        name: 'System Administrator',    // ✅ FIXED: Single name field
         email: 'admin@sla-platform.com',
         password: hashedPassword,
-        first_name: 'Admin',           // ✅ FIXED: was firstName
-        last_name: 'User',             // ✅ FIXED: was lastName
         role: 'admin',
-        is_active: true,               // ✅ FIXED: was status: 'active'
-        email_verified: true,          // ✅ ADDED: email verification
-        email_verified_at: now,        // ✅ ADDED: verification timestamp
+        is_active: true,
+        email_verified: true,
+        email_verified_at: now,
         last_login_at: null,
         last_login_ip: null,
         password_reset_token: null,
@@ -52,19 +51,18 @@ module.exports = {
           created_by: 'system',
           permissions: ['operator_management', 'system_admin', 'analytics_access']
         }),
-        created_at: now,               // ✅ FIXED: was createdAt
-        updated_at: now                // ✅ FIXED: was updatedAt
+        created_at: now,
+        updated_at: now
       },
       {
         id: uuidv4(),
+        name: 'Operator User',           // ✅ FIXED: Single name field
         email: 'operator@sla-platform.com',
         password: hashedPassword,
-        first_name: 'Operator',        // ✅ FIXED: was firstName
-        last_name: 'User',             // ✅ FIXED: was lastName
         role: 'operator',
-        is_active: true,               // ✅ FIXED: was status: 'active'
-        email_verified: true,          // ✅ ADDED: email verification
-        email_verified_at: now,        // ✅ ADDED: verification timestamp
+        is_active: true,
+        email_verified: true,
+        email_verified_at: now,
         last_login_at: null,
         last_login_ip: null,
         password_reset_token: null,
@@ -80,8 +78,8 @@ module.exports = {
           created_by: 'admin',
           permissions: ['subscription_management', 'billing_operations']
         }),
-        created_at: now,               // ✅ FIXED: was createdAt
-        updated_at: now                // ✅ FIXED: was updatedAt
+        created_at: now,
+        updated_at: now
       }
     ]);
 
@@ -91,11 +89,13 @@ module.exports = {
     console.log('   📧 Email: admin@sla-platform.com');
     console.log('   🔐 Password: admin123!');
     console.log('   👑 Role: admin');
+    console.log('   📛 Name: System Administrator');
     console.log('');
     console.log('👤 Operator User:');
     console.log('   📧 Email: operator@sla-platform.com');
     console.log('   🔐 Password: admin123!');
     console.log('   🔧 Role: operator');
+    console.log('   📛 Name: Operator User');
     console.log('');
     console.log('✅ Both users are active and email verified');
     console.log('🚀 Ready to use authentication system!');
