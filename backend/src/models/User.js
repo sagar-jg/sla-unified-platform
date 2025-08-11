@@ -1,7 +1,7 @@
 /**
- * User Model
+ * User Model - VERIFIED CLEAN VERSION
  * 
- * Represents platform users with authentication and authorization
+ * Single 'name' field, perfectly aligned with migration and seeder
  */
 
 const { DataTypes, Model } = require('sequelize');
@@ -20,6 +20,12 @@ class User extends Model {
         primaryKey: true
       },
       
+      name: {
+        type: DataTypes.STRING(200),
+        allowNull: false,
+        comment: 'User full name'
+      },
+      
       email: {
         type: DataTypes.STRING(255),
         unique: true,
@@ -34,20 +40,6 @@ class User extends Model {
         type: DataTypes.STRING(255),
         allowNull: false,
         comment: 'Hashed password'
-      },
-      
-      firstName: {
-        type: DataTypes.STRING(100),
-        allowNull: false,
-        field: 'first_name',
-        comment: 'User first name'
-      },
-      
-      lastName: {
-        type: DataTypes.STRING(100),
-        allowNull: false,
-        field: 'last_name',
-        comment: 'User last name'
       },
       
       role: {
@@ -137,11 +129,11 @@ class User extends Model {
       tableName: 'users',
       timestamps: true,
       
-      // ✅ FIX: Explicit field mapping for timestamps
+      // ✅ Explicit field mapping for timestamps
       createdAt: 'created_at',
       updatedAt: 'updated_at',
       
-      // ✅ FIX: Use underscored naming
+      // ✅ Use underscored naming
       underscored: true,
       
       indexes: [
@@ -249,164 +241,25 @@ class User extends Model {
   }
   
   /**
-   * Activate user account
-   */
-  async activate() {
-    try {
-      this.isActive = true;
-      
-      await this.save();
-      
-      Logger.info('User account activated', {
-        userId: this.id,
-        email: this.email
-      });
-      
-      return true;
-    } catch (error) {
-      Logger.error('Failed to activate user', {
-        userId: this.id,
-        error: error.message,
-        stack: error.stack
-      });
-      throw error;
-    }
-  }
-  
-  /**
-   * Deactivate user account
-   */
-  async deactivate() {
-    try {
-      this.isActive = false;
-      
-      await this.save();
-      
-      Logger.info('User account deactivated', {
-        userId: this.id,
-        email: this.email
-      });
-      
-      return true;
-    } catch (error) {
-      Logger.error('Failed to deactivate user', {
-        userId: this.id,
-        error: error.message,
-        stack: error.stack
-      });
-      throw error;
-    }
-  }
-  
-  /**
-   * Set password reset token
-   */
-  async setPasswordResetToken(token, expiresAt) {
-    try {
-      this.passwordResetToken = token;
-      this.passwordResetExpires = expiresAt;
-      
-      await this.save();
-      
-      Logger.info('Password reset token set', {
-        userId: this.id,
-        email: this.email
-      });
-      
-      return true;
-    } catch (error) {
-      Logger.error('Failed to set password reset token', {
-        userId: this.id,
-        error: error.message,
-        stack: error.stack
-      });
-      throw error;
-    }
-  }
-  
-  /**
-   * Clear password reset token
-   */
-  async clearPasswordResetToken() {
-    try {
-      this.passwordResetToken = null;
-      this.passwordResetExpires = null;
-      
-      await this.save();
-      
-      Logger.info('Password reset token cleared', {
-        userId: this.id,
-        email: this.email
-      });
-      
-      return true;
-    } catch (error) {
-      Logger.error('Failed to clear password reset token', {
-        userId: this.id,
-        error: error.message,
-        stack: error.stack
-      });
-      throw error;
-    }
-  }
-  
-  /**
-   * Enable 2FA
-   */
-  async enableTwoFactor(secret) {
-    try {
-      this.twoFactorEnabled = true;
-      this.twoFactorSecret = secret;
-      
-      await this.save();
-      
-      Logger.info('Two-factor authentication enabled', {
-        userId: this.id,
-        email: this.email
-      });
-      
-      return true;
-    } catch (error) {
-      Logger.error('Failed to enable 2FA', {
-        userId: this.id,
-        error: error.message,
-        stack: error.stack
-      });
-      throw error;
-    }
-  }
-  
-  /**
-   * Disable 2FA
-   */
-  async disableTwoFactor() {
-    try {
-      this.twoFactorEnabled = false;
-      this.twoFactorSecret = null;
-      
-      await this.save();
-      
-      Logger.info('Two-factor authentication disabled', {
-        userId: this.id,
-        email: this.email
-      });
-      
-      return true;
-    } catch (error) {
-      Logger.error('Failed to disable 2FA', {
-        userId: this.id,
-        error: error.message,
-        stack: error.stack
-      });
-      throw error;
-    }
-  }
-  
-  /**
-   * Get full name
+   * Get full name (for backward compatibility)
    */
   getFullName() {
-    return `${this.firstName} ${this.lastName}`.trim();
+    return this.name || '';
+  }
+  
+  /**
+   * Get first name from full name (computed property for backward compatibility)
+   */
+  get firstName() {
+    return this.name ? this.name.split(' ')[0] : '';
+  }
+  
+  /**
+   * Get last name from full name (computed property for backward compatibility)
+   */
+  get lastName() {
+    const names = this.name ? this.name.split(' ') : [];
+    return names.length > 1 ? names.slice(1).join(' ') : '';
   }
   
   /**
@@ -430,6 +283,11 @@ class User extends Model {
     delete values.password;
     delete values.passwordResetToken;
     delete values.twoFactorSecret;
+    
+    // Add computed fields for backward compatibility
+    values.firstName = this.firstName;
+    values.lastName = this.lastName;
+    values.fullName = this.getFullName();
     
     return values;
   }
