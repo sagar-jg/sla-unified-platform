@@ -23,16 +23,16 @@ echo -e "   ✅ Fresh seeder: 001-create-admin-users.js"
 echo ""
 
 # Step 1: Drop and recreate database
-echo -e "${YELLOW}📂 Step 1: Resetting database completely...${NC}"
-npx sequelize-cli db:drop --env development
-npx sequelize-cli db:create --env development
+# echo -e "${YELLOW}📂 Step 1: Resetting database completely...${NC}"
+# npx sequelize-cli db:drop --env development
+# npx sequelize-cli db:create --env development
 
-if [ $? -eq 0 ]; then
-    echo -e "${GREEN}✅ Database reset successfully${NC}"
-else
-    echo -e "${RED}❌ Database reset failed${NC}"
-    exit 1
-fi
+# if [ $? -eq 0 ]; then
+#     echo -e "${GREEN}✅ Database reset successfully${NC}"
+# else
+#     echo -e "${RED}❌ Database reset failed${NC}"
+#     exit 1
+# fi
 
 echo ""
 
