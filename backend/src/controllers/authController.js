@@ -1,7 +1,8 @@
 /**
- * Authentication Controller
+ * Authentication Controller - FIXED VERSION
  * 
  * Handles user authentication, registration, and session management
+ * Fixed field mapping issues between controller and User model
  */
 
 const bcrypt = require('bcryptjs');
@@ -83,8 +84,9 @@ class AuthController {
           user: {
             id: user.id,
             email: user.email,
-            firstName: user.firstName,
-            lastName: user.lastName,
+            name: user.name, // 🔧 FIX: Use name field
+            firstName: user.firstName, // 🔧 FIX: Use computed getter
+            lastName: user.lastName,   // 🔧 FIX: Use computed getter
             role: user.role,
             fullName: user.getFullName(),
             emailVerified: user.emailVerified,
@@ -123,15 +125,24 @@ class AuthController {
   
   /**
    * POST /api/auth/register
-   * Register new user (admin only)
+   * Register new user (admin only or first user)
    */
   static async register(req, res) {
     try {
-      const { email, password, firstName, lastName, role = 'viewer' } = req.body;
+      const { email, password, firstName, lastName, name, role = 'viewer' } = req.body;
+      
+      // 🔧 FIX: Handle both name formats for backward compatibility
+      let fullName = name;
+      if (!fullName && firstName && lastName) {
+        fullName = `${firstName} ${lastName}`;
+      }
+      if (!fullName && firstName) {
+        fullName = firstName;
+      }
       
       // Validate input
-      if (!email || !password || !firstName || !lastName) {
-        throw new ValidationError('Email, password, first name, and last name are required');
+      if (!email || !password || !fullName) {
+        throw new ValidationError('Email, password, and name are required');
       }
       
       if (password.length < 8) {
@@ -151,12 +162,11 @@ class AuthController {
         throw new ValidationError('User with this email already exists');
       }
       
-      // Create user
+      // Create user with single name field
       const user = await User.create({
         email: email.toLowerCase(),
         password,
-        firstName,
-        lastName,
+        name: fullName.trim(), // 🔧 FIX: Use single name field
         role,
         emailVerified: false,
         isActive: true
@@ -177,8 +187,9 @@ class AuthController {
           user: {
             id: user.id,
             email: user.email,
-            firstName: user.firstName,
-            lastName: user.lastName,
+            name: user.name,           // 🔧 FIX: Use name field
+            firstName: user.firstName, // 🔧 FIX: Use computed getter
+            lastName: user.lastName,   // 🔧 FIX: Use computed getter
             role: user.role,
             fullName: user.getFullName(),
             emailVerified: user.emailVerified,
@@ -270,8 +281,9 @@ class AuthController {
           user: {
             id: user.id,
             email: user.email,
-            firstName: user.firstName,
-            lastName: user.lastName,
+            name: user.name,           // 🔧 FIX: Use name field
+            firstName: user.firstName, // 🔧 FIX: Use computed getter
+            lastName: user.lastName,   // 🔧 FIX: Use computed getter
             role: user.role,
             fullName: user.getFullName(),
             emailVerified: user.emailVerified,
@@ -340,8 +352,9 @@ class AuthController {
           user: {
             id: user.id,
             email: user.email,
-            firstName: user.firstName,
-            lastName: user.lastName,
+            name: user.name,           // 🔧 FIX: Use name field
+            firstName: user.firstName, // 🔧 FIX: Use computed getter
+            lastName: user.lastName,   // 🔧 FIX: Use computed getter
             role: user.role,
             fullName: user.getFullName()
           },
